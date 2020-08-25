@@ -15,6 +15,13 @@ class TerranBasicAgent(base_agent.BaseAgent):
         self.barracks_built = False
         self.barracks_rallied = False
         self.army_rallied = False
+        # gas
+        self.gas_built = False
+        # factory
+        self.factory_built = False
+        self.factory_rallied = False
+        self.hellion = False
+        self.army_rallied2 = False
 
     def transformLocation(self, x, x_distance, y, y_distance):
         if not self.base_top_left:
@@ -62,6 +69,13 @@ class TerranBasicAgent(base_agent.BaseAgent):
             self.barracks_built = False
             self.barracks_rallied = False
             self.army_rallied = False
+            # gas
+            self.gas_built = False
+            # factory
+            self.factory_built = False
+            self.factory_rallied = False
+            self.hellion = False
+            self.army_rallied2 = False
 
             player_y, player_x = (
                     obs.observation.feature_minimap.player_relative == features.PlayerRelative.SELF).nonzero()
@@ -80,8 +94,24 @@ class TerranBasicAgent(base_agent.BaseAgent):
             scvs = self.get_units_by_type(obs, units.Terran.SCV)
             if len(scvs) > 0:
                 scv = random.choice(scvs)
-                return actions.FUNCTIONS.select_point("select", (scv.x,
-                                                                 scv.y))
+                return actions.FUNCTIONS.select_point("select", (scv.x,scv.y))
+
+        elif not self.gas_built:
+            if self.unit_type_is_selected(obs, units.Terran.SCV):
+                if self.can_do(obs, actions.FUNCTIONS.Build_Refinery_screen.id):
+                    ccs = self.get_units_by_type(obs, units.Terran.CommandCenter)
+                    if len(ccs) > 0:
+                        mean_x, mean_y = self.getMeanLocation(ccs)
+                        target = self.transformLocation(int(mean_x), 10, int(mean_y), -20)
+                        self.gas_built = True
+                        
+                        return actions.FUNCTIONS.Build_Refinery_screen("now", target)
+        
+            scvs = self.get_units_by_type(obs, units.Terran.SCV)
+            if len(scvs) > 0:
+                scv = random.choice(scvs)
+                return actions.FUNCTIONS.select_point("select", (scv.x, scv.y))
+        
         elif not self.barracks_built:
             if self.unit_type_is_selected(obs, units.Terran.SCV):
                 if self.can_do(obs, actions.FUNCTIONS.Build_Barracks_screen.id):
@@ -95,8 +125,7 @@ class TerranBasicAgent(base_agent.BaseAgent):
             scvs = self.get_units_by_type(obs, units.Terran.SCV)
             if len(scvs) > 0:
                 scv = random.choice(scvs)
-                return actions.FUNCTIONS.select_point("select", (scv.x,
-                                                                 scv.y))
+                return actions.FUNCTIONS.select_point("select", (scv.x, scv.y))
 
         elif not self.barracks_rallied:
             if self.unit_type_is_selected(obs, units.Terran.Barracks):
@@ -109,11 +138,41 @@ class TerranBasicAgent(base_agent.BaseAgent):
             barracks = self.get_units_by_type(obs, units.Terran.Barracks)
             if len(barracks) > 0:
                 barrack = random.choice(barracks)
-                return actions.FUNCTIONS.select_point("select", (barrack.x,
-                                                                 barrack.y))
-        elif obs.observation.player.food_cap - obs.observation.player.food_used:
-            if self.can_do(obs, actions.FUNCTIONS.Train_Marine_quick.id):
-                return actions.FUNCTIONS.Train_Marine_quick("queued")
+                return actions.FUNCTIONS.select_point("select", (barrack.x,barrack.y))
+
+        elif not self.factory_built:
+            if self.unit_type_is_selected(obs, units.Terran.SCV):
+                if self.can_do(obs, actions.FUNCTIONS.Build_Factory_screen.id):
+                    ccs = self.get_units_by_type(obs, units.Terran.CommandCenter)
+                    if len(ccs) > 0:
+                        mean_x, mean_y = self.getMeanLocation(ccs)
+                        target = self.transformLocation(int(mean_x), 20, int(mean_y), 20)
+                        self.factory_built = True
+                        
+                        return actions.FUNCTIONS.Build_Factory_screen("now", target)
+            scvs = self.get_units_by_type(obs, units.Terran.SCV)
+            if len(scvs) > 0:
+                scv = random.choice(scvs)
+                return actions.FUNCTIONS.select_point("select", (scv.x, scv.y))
+        
+        elif not self.factory_rallied:
+            if self.unit_type_is_selected(obs, units.Terran.Factory):
+                self.factory_rallied = True
+
+                if self.base_top_left:
+                    return actions.FUNCTIONS.Rally_Units_minimap("now", [29, 21])
+                else:
+                    return actions.FUNCTIONS.Rally_Units_minimap("now", [29, 46])
+            factorys = self.get_units_by_type(obs, units.Terran.Factory)
+            if len(factorys) > 0:
+                factory = random.choice(factorys)
+                return actions.FUNCTIONS.select_point("select", (factory.x,factory.y))
+
+        elif obs.observation.player.food_cap - obs.observation.player.food_used > 1:
+            if self.can_do(obs, actions.FUNCTIONS.Train_Hellion_quick.id):
+                return actions.FUNCTIONS.Train_Hellion_quick("queued")
+            # elif self.can_do(obs, actions.FUNCTIONS.Train_Marine_quick.id):
+            #     return actions.FUNCTIONS.Train_Marine_quick("queued")
 
         elif not self.army_rallied:
             if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
@@ -129,89 +188,7 @@ class TerranBasicAgent(base_agent.BaseAgent):
 
         return actions.FUNCTIONS.no_op()
 
-class ZergBasicAgent(base_agent.BaseAgent):
-    def __init__(self):
-        super(ZergBasicAgent, self).__init__()
 
-        self.attack_coordinates = None
-
-    def unit_type_is_selected(self, obs, unit_type):
-        if (len(obs.observation.single_select) > 0 and
-                obs.observation.single_select[0].unit_type == unit_type):
-            return True
-
-        if (len(obs.observation.multi_select) > 0 and
-                obs.observation.multi_select[0].unit_type == unit_type):
-            return True
-
-        return False
-
-    def get_units_by_type(self, obs, unit_type):
-        return [unit for unit in obs.observation.feature_units
-                if unit.unit_type == unit_type]
-
-    def can_do(self, obs, action):
-        return action in obs.observation.available_actions
-
-    def step(self, obs):
-        super(ZergBasicAgent, self).step(obs)
-
-        time.sleep(0.5)
-
-        if obs.first():
-            player_y, player_x = (obs.observation.feature_minimap.player_relative ==
-                                  features.PlayerRelative.SELF).nonzero()
-            xmean = player_x.mean()
-            ymean = player_y.mean()
-
-            if xmean <= 31 and ymean <= 31:
-                self.attack_coordinates = (49, 49)
-            else:
-                self.attack_coordinates = (12, 16)
-
-        zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
-        if len(zerglings) >= 10:
-            if self.unit_type_is_selected(obs, units.Zerg.Zergling):
-                if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
-                    return actions.FUNCTIONS.Attack_minimap("now",
-                                                            self.attack_coordinates)
-
-            if self.can_do(obs, actions.FUNCTIONS.select_army.id):
-                return actions.FUNCTIONS.select_army("select")
-
-        spawning_pools = self.get_units_by_type(obs, units.Zerg.SpawningPool)
-        if len(spawning_pools) == 0:
-            if self.unit_type_is_selected(obs, units.Zerg.Drone):
-                if self.can_do(obs, actions.FUNCTIONS.Build_SpawningPool_screen.id):
-                    x = random.randint(0, 83)
-                    y = random.randint(0, 83)
-
-                    return actions.FUNCTIONS.Build_SpawningPool_screen("now", (x, y))
-
-            drones = self.get_units_by_type(obs, units.Zerg.Drone)
-            if len(drones) > 0:
-                drone = random.choice(drones)
-
-                return actions.FUNCTIONS.select_point("select_all_type", (drone.x,
-                                                                          drone.y))
-        if self.unit_type_is_selected(obs, units.Zerg.Larva):
-            free_supply = (obs.observation.player.food_cap -
-                           obs.observation.player.food_used)
-            if free_supply == 0:
-                if self.can_do(obs, actions.FUNCTIONS.Train_Overlord_quick.id):
-                    return actions.FUNCTIONS.Train_Overlord_quick("now")
-
-            if self.can_do(obs, actions.FUNCTIONS.Train_Zergling_quick.id):
-                return actions.FUNCTIONS.Train_Zergling_quick("now")
-
-        larvae = self.get_units_by_type(obs, units.Zerg.Larva)
-        if len(larvae) > 0:
-            larva = random.choice(larvae)
-
-            return actions.FUNCTIONS.select_point("select_all_type", (larva.x,
-                                                                      larva.y))
-
-        return actions.FUNCTIONS.no_op()
 
 def main(unused_argv):
     #agent = ZergBasicAgent()
@@ -230,7 +207,7 @@ def main(unused_argv):
                       use_feature_units=True),
                     step_mul=1,
                     game_steps_per_episode=0,
-                    visualize=True) as env:
+                    visualize=False) as env:
 
               agent.setup(env.observation_spec(), env.action_spec())
 
@@ -243,8 +220,97 @@ def main(unused_argv):
                       break
                   timesteps = env.step(step_actions)
 
+
     except KeyboardInterrupt:
         pass
 
+
+
+
 if __name__ == "__main__":
     app.run(main)
+
+
+# class ZergBasicAgent(base_agent.BaseAgent):
+#     def __init__(self):
+#         super(ZergBasicAgent, self).__init__()
+
+#         self.attack_coordinates = None
+
+#     def unit_type_is_selected(self, obs, unit_type):
+#         if (len(obs.observation.single_select) > 0 and
+#                 obs.observation.single_select[0].unit_type == unit_type):
+#             return True
+
+#         if (len(obs.observation.multi_select) > 0 and
+#                 obs.observation.multi_select[0].unit_type == unit_type):
+#             return True
+
+#         return False
+
+#     def get_units_by_type(self, obs, unit_type):
+#         return [unit for unit in obs.observation.feature_units
+#                 if unit.unit_type == unit_type]
+
+#     def can_do(self, obs, action):
+#         return action in obs.observation.available_actions
+
+#     def step(self, obs):
+#         super(ZergBasicAgent, self).step(obs)
+
+#         time.sleep(0.5)
+
+#         if obs.first():
+#             player_y, player_x = (obs.observation.feature_minimap.player_relative ==
+#                                   features.PlayerRelative.SELF).nonzero()
+#             xmean = player_x.mean()
+#             ymean = player_y.mean()
+
+#             if xmean <= 31 and ymean <= 31:
+#                 self.attack_coordinates = (49, 49)
+#             else:
+#                 self.attack_coordinates = (12, 16)
+
+#         zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
+#         if len(zerglings) >= 10:
+#             if self.unit_type_is_selected(obs, units.Zerg.Zergling):
+#                 if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
+#                     return actions.FUNCTIONS.Attack_minimap("now",
+#                                                             self.attack_coordinates)
+
+#             if self.can_do(obs, actions.FUNCTIONS.select_army.id):
+#                 return actions.FUNCTIONS.select_army("select")
+
+#         spawning_pools = self.get_units_by_type(obs, units.Zerg.SpawningPool)
+#         if len(spawning_pools) == 0:
+#             if self.unit_type_is_selected(obs, units.Zerg.Drone):
+#                 if self.can_do(obs, actions.FUNCTIONS.Build_SpawningPool_screen.id):
+#                     x = random.randint(0, 83)
+#                     y = random.randint(0, 83)
+
+#                     return actions.FUNCTIONS.Build_SpawningPool_screen("now", (x, y))
+
+#             drones = self.get_units_by_type(obs, units.Zerg.Drone)
+#             if len(drones) > 0:
+#                 drone = random.choice(drones)
+
+#                 return actions.FUNCTIONS.select_point("select_all_type", (drone.x,
+#                                                                           drone.y))
+#         if self.unit_type_is_selected(obs, units.Zerg.Larva):
+#             free_supply = (obs.observation.player.food_cap -
+#                            obs.observation.player.food_used)
+#             if free_supply == 0:
+#                 if self.can_do(obs, actions.FUNCTIONS.Train_Overlord_quick.id):
+#                     return actions.FUNCTIONS.Train_Overlord_quick("now")
+
+#             if self.can_do(obs, actions.FUNCTIONS.Train_Zergling_quick.id):
+#                 return actions.FUNCTIONS.Train_Zergling_quick("now")
+
+#         larvae = self.get_units_by_type(obs, units.Zerg.Larva)
+#         if len(larvae) > 0:
+#             larva = random.choice(larvae)
+
+#             return actions.FUNCTIONS.select_point("select_all_type", (larva.x,
+#                                                                       larva.y))
+
+#         return actions.FUNCTIONS.no_op()
