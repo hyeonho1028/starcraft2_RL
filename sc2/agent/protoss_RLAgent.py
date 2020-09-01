@@ -15,22 +15,22 @@ from absl import app
 DATA_FILE = 'rlagent_learning_data'
 
 ACTION_DO_NOTHING = 'donothing'
-ACTION_SELECT_SCV = 'selectscv'
-ACTION_BUILD_SUPPLY_DEPOT = 'buildsupplydepot'
-ACTION_BUILD_BARRACKS = 'buildbarracks'
-ACTION_SELECT_BARRACKS = 'selectbarracks'
-ACTION_BUILD_MARINE = 'buildmarine'
-ACTION_SELECT_ARMY = 'selectarmy'
+ACTION_SELECT_PROBE = 'selectprobe'
+ACTION_BUILD_PYLON = 'buildpylon'
+ACTION_BUILD_GATEWAY = 'buildgateway'
+ACTION_SELECT_GATEWAY = 'selectgateway'
+ACTION_BUILD_ZEALOT = 'buildzealot'
+ACTION_SELECT_ZEALOT = 'selectzealot'
 ACTION_ATTACK = 'attack'
 
 smart_actions = [
     ACTION_DO_NOTHING,
-    ACTION_SELECT_SCV,
-    ACTION_BUILD_SUPPLY_DEPOT,
-    ACTION_BUILD_BARRACKS,
-    ACTION_SELECT_BARRACKS,
-    ACTION_BUILD_MARINE,
-    ACTION_SELECT_ARMY,
+    ACTION_SELECT_PROBE,
+    ACTION_BUILD_PYLON,
+    ACTION_BUILD_GATEWAY,
+    ACTION_SELECT_GATEWAY,
+    ACTION_BUILD_ZEALOT,
+    ACTION_SELECT_ZEALOT,
 ]
 
 #for mm_x in range(0, 64):
@@ -93,9 +93,9 @@ class QLearningTable:
                 pd.Series([0] * len(self.actions), index=self.q_table.columns, name=state))
 
 
-class TerranRLAgent(base_agent.BaseAgent):
+class ProtossRLAgent(base_agent.BaseAgent):
     def __init__(self):
-        super(TerranRLAgent, self).__init__()
+        super(ProtossRLAgent, self).__init__()
 
         self.base_top_left = None
         self.qlearn = QLearningTable(actions=list(range(len(smart_actions))))
@@ -151,7 +151,7 @@ class TerranRLAgent(base_agent.BaseAgent):
         return action in obs.observation.available_actions
 
     def step(self, obs):
-        super(TerranRLAgent, self).step(obs)
+        super(ProtossRLAgent, self).step(obs)
 
         #time.sleep(0.5)
 
@@ -162,41 +162,21 @@ class TerranRLAgent(base_agent.BaseAgent):
             player_y, player_x = (obs.observation.feature_minimap.player_relative == features.PlayerRelative.SELF).nonzero()
             self.base_top_left = 1 if player_y.any() and player_y.mean() <= 31 else 0
 
-        supply_depot_count = len(self.get_units_by_type(obs, units.Terran.SupplyDepot))
+        pylon_count = len(self.get_units_by_type(obs, units.Protoss.Pylon))
 
-        barracks_count = len(self.get_units_by_type(obs, units.Terran.Barracks))
+        gateway_count = len(self.get_units_by_type(obs, units.Protoss.Gateway))
 
-        supply_limit = obs.observation.player.food_cap
-        army_supply = obs.observation.player.food_used
+        pylon_limit = obs.observation.player.food_cap
+        army_pylon = obs.observation.player.food_used
 
         killed_unit_score = obs.observation.score_cumulative.killed_value_units
         killed_building_score = obs.observation.score_cumulative.killed_value_structures
 
-#        current_state = np.zeros(5000)
-#        current_state[0] = supply_depot_count
-#        current_state[1] = barracks_count
-#        current_state[2] = supply_limit
-#        current_state[3] = army_supply
-#
-#        hot_squares = np.zeros(4096)
-#        enemy_y, enemy_x = (obs.observation.feature_minimap.player_relative == features.PlayerRelative.ENEMY).nonzero()
-#        for i in range(0, len(enemy_y)):
-#            y = int(enemy_y[i])
-#            x = int(enemy_x[i])
-#
-#            hot_squares[((y - 1) * 64) + (x - 1)] = 1
-#
-#        if not self.base_top_left:
-#            hot_squares = hot_squares[::-1]
-#
-#        for i in range(0, 4096):
-#            current_state[i + 4] = hot_squares[i]
-
         current_state = np.zeros(20)
-        current_state[0] = supply_depot_count
-        current_state[1] = barracks_count
-        current_state[2] = supply_limit
-        current_state[3] = army_supply
+        current_state[0] = pylon_count
+        current_state[1] = gateway_count
+        current_state[2] = pylon_limit
+        current_state[3] = army_pylon
 
         hot_squares = np.zeros(16)
         enemy_y, enemy_x = (obs.observation.feature_minimap.player_relative == features.PlayerRelative.ENEMY).nonzero()
@@ -239,66 +219,66 @@ class TerranRLAgent(base_agent.BaseAgent):
         if smart_action == ACTION_DO_NOTHING:
             return actions.FUNCTIONS.no_op()
 
-        elif smart_action == ACTION_SELECT_SCV:
+        elif smart_action == ACTION_SELECT_PROBE:
             if self.can_do(obs, actions.FUNCTIONS.select_point.id):
-                scvs = self.get_units_by_type(obs, units.Terran.SCV)
-                if len(scvs) > 0:
-                    scv = random.choice(scvs)
-                    if scv.x >= 0 and scv.y >= 0:
-                        return actions.FUNCTIONS.select_point("select", (scv.x,
-                                                                              scv.y))
+                probes = self.get_units_by_type(obs, units.Protoss.Probe)
+                if len(probes) > 0:
+                    probe = random.choice(probes)
+                    if probe.x >= 0 and probe.y >= 0:
+                        return actions.FUNCTIONS.select_point("select", (probe.x,
+                                                                              probe.y))
 
-        elif smart_action == ACTION_BUILD_SUPPLY_DEPOT:
-            if self.can_do(obs, actions.FUNCTIONS.Build_SupplyDepot_screen.id):
-                ccs = self.get_units_by_type(obs, units.Terran.CommandCenter)
+        elif smart_action == ACTION_BUILD_PYLON:
+            if self.can_do(obs, actions.FUNCTIONS.Build_Pylon_screen.id):
+                ccs = self.get_units_by_type(obs, units.Protoss.Nexus)
                 if len(ccs) > 0:
                     mean_x, mean_y = self.getMeanLocation(ccs)
                     target = self.transformDistance(int(mean_x), 0, int(mean_y), 20)
 
-                    return actions.FUNCTIONS.Build_SupplyDepot_screen("now", target)
+                    return actions.FUNCTIONS.Build_Pylon_screen("now", target)
 
-        elif smart_action == ACTION_BUILD_BARRACKS:
-            if self.can_do(obs, actions.FUNCTIONS.Build_Barracks_screen.id):
-                ccs = self.get_units_by_type(obs, units.Terran.CommandCenter)
+        elif smart_action == ACTION_BUILD_GATEWAY:
+            if self.can_do(obs, actions.FUNCTIONS.Build_Gateway_screen.id):
+                ccs = self.get_units_by_type(obs, units.Protoss.Pylon)
                 if len(ccs) > 0:
                     mean_x, mean_y = self.getMeanLocation(ccs)
-                    target = self.transformDistance(int(mean_x), 20, int(mean_y), 0)
+                    target = self.transformDistance(int(mean_x), 10, int(mean_y), 0)
 
-                    return actions.FUNCTIONS.Build_Barracks_screen("now", target)
+                    return actions.FUNCTIONS.Build_Gateway_screen("now", target)
 
-        elif smart_action == ACTION_SELECT_BARRACKS:
+        elif smart_action == ACTION_SELECT_GATEWAY:
             if self.can_do(obs, actions.FUNCTIONS.select_point.id):
-                barracks = self.get_units_by_type(obs, units.Terran.Barracks)
-                if len(barracks) > 0:
-                    barrack = random.choice(barracks)
-                    if barrack.x >= 0 and barrack.y >= 0:
-                        return actions.FUNCTIONS.select_point("select", (barrack.x,
-                                                                              barrack.y))
+                gateways = self.get_units_by_type(obs, units.Protoss.Gateway)
+                if len(gateways) > 0:
+                    gateway = random.choice(gateways)
+                    if gateway.x >= 0 and gateway.y >= 0:
+                        return actions.FUNCTIONS.select_point("select", (gateway.x,
+                                                                              gateway.y))
 
-        elif smart_action == ACTION_BUILD_MARINE:
-            if self.can_do(obs, actions.FUNCTIONS.Train_Marine_quick.id):
-                return actions.FUNCTIONS.Train_Marine_quick("queued")
+        elif smart_action == ACTION_BUILD_ZEALOT:
+            if self.can_do(obs, actions.FUNCTIONS.Train_Zealot_quick.id):
+                return actions.FUNCTIONS.Train_Zealot_quick("queued")
 
-        elif smart_action == ACTION_SELECT_ARMY:
+        elif smart_action == ACTION_SELECT_ZEALOT:
             if self.can_do(obs, actions.FUNCTIONS.select_army.id):
                 return actions.FUNCTIONS.select_army("select")
 
         elif smart_action == ACTION_ATTACK:
             #if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
-            if not self.unit_type_is_selected(obs, units.Terran.SCV) and self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
+            if not self.unit_type_is_selected(obs, units.Protoss.Probe) and self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
                 return actions.FUNCTIONS.Attack_minimap("now", self.transformLocation(int(x), int(y)))
 
         return actions.FUNCTIONS.no_op()
 
 def main(unused_argv):
-    agent = TerranRLAgent()
+    agent = ProtossRLAgent()
     try:
         while True:
             with sc2_env.SC2Env(
                     #map_name="AbyssalReef",
                     map_name="Simple64",
                     #players=[sc2_env.Agent(sc2_env.Race.zerg),
-                    players=[sc2_env.Agent(sc2_env.Race.terran),
+                    players=[sc2_env.Agent(sc2_env.Race.protoss),
                              sc2_env.Bot(sc2_env.Race.random,
                                          sc2_env.Difficulty.very_easy)],
                     agent_interface_format=features.AgentInterfaceFormat(
